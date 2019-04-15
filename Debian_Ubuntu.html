@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Debian/ Ubuntu</title>
+<meta charset="UTF-8">
+</head>
+<body>
+<!--Navigation bar-->
+<div id="navbar-keytool"></div>
+</script>
+<!--end of Navigation bar-->
+<a id="Step1"></a>
+<h2>Step 1 - Creating an SSL/TLS certificate</h2>
+<p>Elliptical Curves are just as strong as RSA, but they have a smaller footprint and require less overhead for cpu/network topologies. When deployed in high traffic situations, any cost savings without compromising something is always welcome.  You can choose to generate an RSA or EC certificate and you will be fine with either. For those who have special cases or a need for running both, this is possible and will be discussed in a future update to this document.</p>
+<h3>Become the all powerful root user or enter sudo before every command from this point forward</h3>
+<pre>sudo su</pre>
+<h3>In order to create all of the keys and things we will need to change to the SSL directory</h3>
+<pre>cd /etc/ssl/</pre>
+<h3>Is there an openssl.cnf file there?</h3>
+<ul>
+<li>Run the following command:</li>
+</ul>
+<pre>ls -l</pre>
+<hr>
+<a id="Step1a"></a>
+<h2>Step 1a - Creating an SSL/TLS certificate - Edit the OpenSSL.cnf file</h2>
+<pre>nano /etc/ssl/openssl.cnf</pre>
+<p>OpenSSL Config File - These are the default fields you will be asked to input during the creation process.<br>
+  <br>
+   req_extensions = v3_req # The extensions to add to a certificate request<br>
+  <br>
+  [ req_distinguished_name ]<br>
+  countryName                     = Country Name (2 letter code)<br>
+  countryName_default             = US <span class="Comment">&lt;---this will be the default Country unless you change it in the config file or during certificate creation</span><br>
+  countryName_min                 = 2<br>
+  countryName_max                 = 2<br>
+  <br>
+  stateOrProvinceName             = State or Province Name (full name)<br>
+  stateOrProvinceName_default     = DC <span class="Comment">&lt;---this will be the default State unless you change it in the config file or during certificate creation</span><br>
+  <br>
+  localityName                    = Locality Name (eg, city)<br>
+  localityName_default            = Washington <span class="Comment">&lt;---this will be the default City unless you change it in the config file or during certificate creation</span><br>
+  <br>
+  0.organizationName              = Organization Name (eg, company)<br>
+  0.organizationName_default      = Company <span class="Comment">&lt;---this will be the default Company Name unless you change it in the config file or during certificate creation</span><br>
+  <br>
+  # we can do this but it is not needed normally :-)<br>
+  #1.organizationName             = Second Organization Name (eg, company)<br>
+  #1.organizationName_default     = <span class="Comment">&lt;---this is commented out. If you want to add this field uncomment it in the config file</span><br>
+  <br>
+  organizationalUnitName          = Organizational Unit Name (eg, section)<br>
+  organizationalUnitName_default  = Tech <span class="Comment">&lt;---this will be the default Organizational Unit (OU) unless you change it in the config file or during certificate creation</span><br>
+  <br>
+  commonName                      = Common Name (e.g. server FQDN or YOUR name)<br>
+  commonName_default              = www.EXAMPLE.com <span class="Comment">&lt;---this will be the default website or FQDN unless you change it in the config file or during certificate creation</span><br>
+  commonName_max                  = 64<br>
+  <br>
+  emailAddress                    = Email Address<br>
+  emailAddress_default            = info@EXAMPLE.com <span class="Comment">&lt;---this will be the default email address unless you change it in the config file or during certificate creation</span><br>
+  emailAddress_max                = 64 </p>
+</p>
+<h3>There is no openssl.cnf file  or I do not know how to alter one!</h3>
+<p><a href="openssl.cnf" title="Open SSL config file" target="_blank">Cut &amp; Paste this generic one</a></p>
+<pre>nano /etc/pki/tls/openssl.cnf</pre>
+<p> <span class="Red">If you use the openssl.cnf file from this site, you need to look at one thing!</span> If you are going to have alternative names, you will have to either add them within the openssl.cnf (noted section below) or comment out (after DNS.1=) this part of the config. </p>
+<h3>Look for the section with [alt_names]</h3>
+<p><strong>ctrl+v pages down</strong><br>
+  <br>
+  [ alt_names ]<br>
+  DNS.1 = EXAMPLE.com</p>
+<h3 class="examples">Example</h3>
+<p><span class="Comment">www.EXAMPLE.com</span> is what you are asked to input during the certificate creation. Before you create the cert, you need to change the alt names since they will be automatically added to the certificate during the creation process.<br>
+  <br>
+  [ alt_names ]<br>
+  DNS.1 = <span class="Comment">EXAMPLE.com</span><br>
+  DNS.2 = <span class="Comment">web1.EXAMPLE.com</span><br>
+  DNS.3 = <span class="Comment">mail.EXAMPLE.com</span><br>
+<br>
+<h3>After you commented out the alt_names or added them, please save the file by pressing the following keys then enter:</h3>
+<p> ctrl+o</p>
+<h3>Then to exit</h3>
+<p> ctrl+x </p>
+<h3>Change to the ssl private directory</h3>
+<pre>cd private/ </pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step1b"></a>
+<h2>Step 1b - Creating an SSL/TLS certificate - Creating the key and certificate</h2>
+<p>Please use some naming convention so all certificates are unique descriptive names. <strong>The keys will not have passwords on them! </strong>If they have passwords on them, each time Apache restarts, you will have to enter the keys password before it will start. The keys and cert's will be protected by file permissions to ensure their integrity. </p>
+<p><span class="RSA"><b>Free Certificate Authority (CA) based signed certificates</b></span> can be found <a href="https://letsencrypt.org/" title="Free CA signed certs" target="_blank">here</a> - Ever since Mozilla entered a false CA certificate in their browser, they are the driving force for this effort. Great collaboration effort!</p>
+<a id="ECC"></a>
+<h2 class="under">RSA Based Certificates</h2>
+<a id="RSA_Self"></a>
+<h3>Self Signed Certificate - Testing <span class="Red">(results in a pop-up security warning box that must be acknowledged when accessing the application or site)</span></h3>
+<pre>openssl req -x509 -nodes -sha384 -days 365 -newkey rsa:4096 -keyout rsa_EXAMPLE.key -out rsa_EXAMPLE.crt -extensions v3_req</pre>
+<a id="RSA_Key"></a>
+<h3>Check the Key</h3>
+<pre>openssl rsa -in rsa_EXAMPLE.key -text -noout</pre>
+<p>or</p>
+<pre>openssl rsa -in rsa_EXAMPLE.key -check</pre>
+<a id="RSA_Cert"></a>
+<h3>Check the Certificate</h3>
+<p>(Short Version)</p>
+<pre>openssl x509 -in rsa_EXAMPLE.crt -text -noout</pre>
+<p>or (Long Version)</p>
+<pre>openssl x509 -in rsa_EXAMPLE.crt -text</pre>
+<a id="RSA_CSR"></a>
+<h3>Certificate Signing Request (CSR) for Certificate Authority (CA) signed Certificate <span class="RSA">(no security warning box)</span></h3>
+<pre>openssl req   -nodes -sha384 -days 1095   -newkey rsa:4096  -keyout rsa_EXAMPLE.key -out rsa_EXAMPLE.csr -extensions v3_req</pre>
+<a id="RSA_CSRc"></a>
+<h3>Check a Certificate Signing Request (CSR)</h3>
+<pre>openssl req -text -noout -verify -in rsa_EXAMPLE.csr</pre>
+<a id="RSA_CA"></a>
+<h3> <span class="examples">EXAMPLE:</span> Comodo Certificate Authority (CA) Certificate creation procedure</h3>
+<p>Cut &amp; Paste the csr file into the Comodo CA request box and choose Apache mod SSL or Apache OpenSSL for the server.- nano rsa_EXAMPLE.csr</p>
+<pre>nano rsa_EXAMPLE.csr</pre>
+<p> You receive the following files after Comodo signs your certificate. </p>
+<ol>
+  <li>AddTrustExternalCARoot.crt</li>
+  <li>COMODORSAAddTrustCA.crt</li>
+  <li>COMODORSADomainValidationSecureServerCA.crt</li>
+  <li>www_EXAMPLE_com.crt <span class="Red">&lt;---This is your server certificate</span></li>
+</ol>
+<p><span class="bold">To create the CA Chain Certificate</span></p>
+<pre>cat COMODORSADomainValidationSecureServerCA.crt COMODORSAAddTrustCA.crt &gt;&gt; EXAMPLE_com_CA.crt</pre>
+<h3>Apache Website config file usage</h3>
+<p> We will go into much more depth on where and how these Certificates and Keys will be used and stored.<br>
+  <br>
+  SSLCertificateFile      /etc/apache2/ssl/<span class="Comment">www_EXAMPLE_com.crt</span><br>
+  SSLCertificateKeyFile   /etc/apache2/ssl/<span class="Comment">rsa_EXAMPLE.key</span><br>
+  SSLCertificateChainFile /etc/apache2/ssl/<span class="Comment">EXAMPLE_com_CA.crt</span><br>
+  <br>
+  <a id="RSA_CMD"></a>
+<h3 class="green">Informational</h3>
+<p><span class="bold_under">Options for the commands</span><br>
+  -days - 365 = year (I issue three year or 1095)<br>
+  -sha - can be 256, 384 or 512 (I use 384 or 512) <br>
+  -rsa: - 2048 or 4096 (I use 4096) - a bit more overhead but hey why not :-) anything higher than 4096 - the cost and performance is horrendous for higher <br>
+  -extensions v3_req - you want the v3 extension for your certificates<br>
+  -nodes - To nodes or not to nodes that is the question? Remove -nodes and it will ask  to password protect the file<br>
+  -noout - This option inhibits the output of the encoded version of the parameters </p>
+<p><a href="#Top">Top</a></p>
+<hr>
+<h2>Step 2 - Preparing the SSL/TLS environment</h2>
+<p>Now we need to create and secure the directory where our Certificates and Keys will be stored to be used by Apache. We will also need to create some random DH Parameters for offsetting the Logjam vulnerability and making a better overall security stance. </p>
+<hr>
+<a id="Step2a"></a>
+<h2>Step 2a - Preparing the SSL/TLS environment - Creating and Securing the Apache Key/Certificate store</h2>
+<h3>Change to the Apache Directory</h3>
+<pre>cd /etc/apache2</pre>
+<h3>Create the SSL Directory</h3>
+<pre>mkdir ssl </pre>
+<h3>Change permissions on the SSL Directory</h3>
+<pre>chown 644 ssl/</pre>
+<h3>Copy the Keys to the SSL directory</h3>
+<pre>cp /etc/ssl/private/*.key /etc/apache2/ssl</pre>
+<h3>Change permissions on the Keys</h3>
+<pre>chown 640 ssl/*.key </pre>
+<h3>Copy the Certificates to the SSL directory</h3>
+<p><span class="RSA">Do not forget to move the www_EXAMPLE_com.crt &amp; EXAMPLE_com_CA.crt to the directory if you have a CA Signed Certificate</span></p>
+<pre>cp /etc/ssl/private/*.crt /etc/apache2/ssl</pre>
+<h3>Change permissions on the Certificates</h3>
+<pre>chown 644 ssl/*.crt </pre>
+<a id="Step2a_Param"></a>
+<h3>Generating Diffie-Hellman (DH) and Elliptic Curve Parameters</h3>
+<p>With Forward Secrecy, if an attacker gets a hold of the server's private key, it will not be able to decrypt past communications. The private key is only used to sign the DH handshake, which does not reveal the pre-master key. Diffie-Hellman ensures that the pre-master keys never leave the client and the server, and cannot be intercepted by a Man in the Middle attack (MiTM). <br>
+<br>
+<span class="Red"><b>BTW - This procedure will take some time. Generating the DH Parameters puts a HUGE load on the server, so keep this in mind! </b></span></p>
+<a id="Step2a_DH"></a>
+<h3>Change to the Apache2 SSL directory</h3>
+<pre>cd /etc/apache/ssl</pre>
+<h3>Generate the DH Params file<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;(Mandatory - Slow)</span></h3>
+<pre>openssl dhparam -out dhparam.pem 4096</pre>
+<h3>Set permissions on the DH PEM file<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;(Mandatory)</span></h3>
+<pre>chown 640 *.pem</pre>
+<a id="Step2a_EC"></a>
+<h3>Set permissions on the PEM file</h3>
+<pre>chown 640 *.pem</pre>
+<h3>Add the Params files to the SSL config - (Global use - <span class="Red">Preferred Method</span>)</span></h3>
+<p><span class="Comment">Add the blue lines below</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="Red">(Preferred)</span><br>
+<pre>nano /etc/apache2/mods-available/ssl.conf</pre>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLRandomSeed startup builtin<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLRandomSeed startup file:/dev/urandom 512<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLRandomSeed connect builtin<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLRandomSeed connect file:/dev/urandom 512<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLOpenSSLConfCmd Options -SessionTicket</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- We do not want clients connecting with older tickets, but instead initiate a full handshake </span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLCompression off</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Prevents Crime Attack but it should be disabled in Apache2 with the latest version</span> <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLOpenSSLConfCmd DHParameters &quot;/etc/apache2/ssl/dhparam.pem&quot;</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Helps to speed the random generation, increase DH key strength and handshake process </span><br>
+  ............................<br>
+  &lt;/IfModule&gt;</p>
+<p>A copy & paste version is found below:</p>
+<pre>
+SSLOpenSSLConfCmd Options -SessionTicket
+SSLCompression off
+SSLOpenSSLConfCmd DHParameters "/etc/apache2/ssl/dhparam.pem"
+</pre>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Apache2 Web site config file <span class="RSA">(Local use - Alternative)</span> </h3>
+<p><span class="Comment">Add the blue lines below</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="RSA">(Alternative)</span></p>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p>&lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin host@EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLOpenSSLConfCmd Options -SessionTicket</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLCompression off</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLOpenSSLConfCmd DHParameters &quot;/etc/apache2/ssl/dhparam.pem&quot;</span><br>
+  ........................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;</p>
+<p>A copy & paste version is found below:</p>
+<pre>
+SSLOpenSSLConfCmd Options -SessionTicket
+SSLCompression off
+SSLOpenSSLConfCmd DHParameters "/etc/apache2/ssl/dhparam.pem"
+</pre>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<p><a href="#top">Top</a></p>
+  <hr>
+<a id="Step2b"> </a>
+<h2>Step 2b - Preparing the SSL/TLS environment - Apache site config http/https</h2>
+<p>There are a number of considerations you will have to account for in the https configuration file. A <a href="https://httpd.apache.org/docs/current/vhosts/mass.html" title="Mass hosting" target="_blank">great guide</a> for <a href="http://httpd.apache.org/docs/current/sections.html" title="Apache 2.4 guide " target="_blank">options</a> and <a href="https://httpd.apache.org/docs/current/vhosts/examples.html" title="VH Guide" target="_blank">other considerations</a></p>
+<h3>Creating the HTTP Web site file</h3>
+<p><span class="Comment">Change the blue EXAMPLE to whatever is appropriate for your needs</span></p><br>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com.conf</pre>
+<pre> &lt;VirtualHost *:80&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;ServerName <span class="Comment">EXAMPLE.com</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;ServerAlias <span class="Comment">www.EXAMPLE.com</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/<span class="Comment">EXAMPLE</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex <span class="Comment">index.html</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &lt;/VirtualHost&gt;</pre>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Creating the HTTPS Web site file</h3>
+<p></span><span class="Comment">Change the blue EXAMPLE to whatever is appropriate for your needs</span></p>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin <span class="Comment">host@EXAMPLE.com</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to whatever email address for your domain</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName <span class="Comment"> EXAMPLE.com</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to the web site name you want to use</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias <span class="Comment">www.EXAMPLE.com</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to www or add any other alias for the site</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html<span class="Comment">/EXAMPLE</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to the directory where the web site files are located</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex <span class="Comment"> index.html</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this if you wish to have another name for the default page</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLEngine on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateFile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/etc/apache2/ssl/<span class="blue">www_EXAMPLE_com.crt</span><span class="red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to the Self Signed or the Certificate Authority Signed Certificate </span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateKeyFile   /etc/apache2/ssl/<span class="Comment">rsa_EXAMPLE.key</span>&nbsp;&nbsp;<b>or </b> &nbsp;&nbsp;<span class="Comment">ec_EXAMPLE.key</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to the key you generated for the site</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateChainFile /etc/apache2/ssl/<span class="Comment">EXAMPLE_CA.crt</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change this to the Certificate Authority Chain file you created </span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCACertificatePath /etc/ssl/certs/<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLCACertificateFile /etc/apache2/ssl/<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLCARevocationPath /etc/apache2/ssl.crl/<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLCARevocationFile /etc/apache2/ssl.crl/ca-bundle.crl<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLVerifyClient require<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLVerifyDepth  10<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLOptions +FakeBasicAuth +ExportCertData +StrictRequire<br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;FilesMatch &quot;\.(cgi|shtml|phtml|php)$&quot;&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLOptions +StdEnvVars<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/FilesMatch&gt;<br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Directory /usr/lib/cgi-bin&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLOptions +StdEnvVars<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Directory&gt;<br>
+  <br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Directory /&gt;</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Protect our system files if you do not add this locally, you can add it globally in <a href="#Step2c">Step2c</a></span> - If you are hosting numerous sites - Add it locally here<br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Require all denied<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AllowOverride None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Options None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Directory&gt;</span><br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Directory /var/www/html/<span class="Comment">EXAMPLE</span>/&gt;<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change to the directory of where the web sites files are located</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="RSA">Enter options of what to allow to execute or not(Optional permissions for directories below)</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Directory&gt;<br>
+  <br>
+  <span class="RSA"><strong>(Optional permissions for directories) </strong>Use the - sign before the option to disable and use the + sign to enable the option</p>
+<h3><span class="examples"> EXAMPLE:</span></h3>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Directory /var/www/html/<span class="Comment">EXAMPLE</span>&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Options +Includes -Indexes -ExecCGI +FollowSymLink <span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Enables Server Side Includes (SSI), disables Indexing, disable executing CGI scripts and enables Following Symlinks</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AllowOverride None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Order allow,deny<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;IndexIgnore *.mp3 <span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Hide certain files types from public view if allowing listing</span> - Requires Indexes <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Allow from all<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Allow from 10.10.0.0/24</span> To only allow certain networks<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Directory&gt;<br>
+  <br>
+  <strong>Options All </strong>– All options are enabled (except MultiViews). <b>If you don’t specify Options directive, this is the default value.</b>&nbsp;&nbsp;<span class="Red"><strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Never use!!!</strong><br>
+  <strong>Options ExecCGI</strong> – Execute CGI scripts (uses mod_cgi)<br>
+  <strong>Options FollowSymLinks</strong> – If you have symbolic links in this directory, it will be followed.<br>
+  <strong>Options Includes</strong> – Allow server side includes (uses mod_include)<br>
+  <strong>Options Includes NOEXEC</strong> – Allow server side includes without the ability to execute a command or cgi.<br>
+  <strong>Options Indexes</strong> – Disable directory listing<br>
+  <strong>Options MultiViews</strong> – Allow content negotiated multiviews (uses mod_negotiation)<br>
+  <strong>Options SymLinksIfOwnerMatch</strong> – Similar to FollowSymLinks. But, this will follow only when the owner is same between the link and the original directory to which it is linked. </p>
+<h3><span class="RSA"><strong>(Optional)</strong></span> Protecting our content from being displayed on someone else's website (Think twice about this before implementing: Internet systems, probably not.  Intranet systems, probably.)</h3>
+<p> <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;SSetEnvIf Referer &quot;^https://www\.EXAMPLE\.com/&quot;  local_referal</span> <span class="RSA">&nbsp;&nbsp;&nbsp;&nbsp;&lt;---  Protecting our content from being displayed on someone else's website</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;SSetEnvIf Referer &quot;^$&quot; local_referal</span><br>
+  <br>
+  <b>Protect the directories you desire</b><span class="RSA">&nbsp;&nbsp;&nbsp;&nbsp;&lt;---  Protecting the directories of the content you do not want displayed on someone else's website</span><br>
+  <br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Directory &quot;/var/www/html/EXAMPLE/images&quot;&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Require env local_referal<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Directory&gt;<br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Directory &quot;/var/www/html/EXAMPLE/documents&quot;&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Require env local_referal<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Directory&gt;</span> <br>
+  ......................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;<br>
+  <br>
+  # vim: syntax=apache ts=4 sw=4 sts=4 sr noet</p>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step2c"></a>
+<h2>Step 2c - Preparing the SSL/TLS environment - Configuring Apache/PHP</h2>
+<p>We need to minimize the information we are sharing with everyone. Also, we need to look over what <a href="https://httpd.apache.org/docs/trunk/new_features_2_4.html" title="Apache2.4 Modules" target="_blank">modules are running</a> and interacting with what applications. The bulk of the work is really in this procedure.  It does not just involve turning on or off modules; but instead heavy tweaking the modules behavior and function can really harden a system beyond a hackers reach.  Over time I will release more documentation on how to modify and alter Apache2 for performance and trapping rogue admins. <br>
+  <br>
+  <p><span class="RSA">How to enable or disable Apache 2.4 modules</span></p>
+  <p>Enabling modules:</p>
+  <pre>a2enmod (module name)</pre>
+  <p>Disabling modules:</p>
+  <pre>a2dismod (module name)</pre>
+<h3>Disable unnecessary Apache 2.4 modules </h3>
+<p><span class="RSA">To list all of the Apache modules running:</span></p><br>
+  <pre>apachectl -M</pre>
+<p>Disable ANY Modules not needed for your configuration or turn them all off and re-enable them below</p>
+<h3>Enabling needed Apache 2.4 modules </h3>
+<pre>a2enmod ssl headers rewrite expires proxy proxy_fcgi proxy_http http2 cache cache_socache socache_shmcb php5</pre>
+<h3>Enabling the newly created sites under Apache 2.4</h3>
+<pre>a2ensite /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<pre>a2ensite /etc/apache2/sites-available/EXAMPLE_com.conf</pre>
+<h3>Disabling the default sites under Apache 2.4</h3>
+<p><span class="red">Do not forget to handle the IP defaulting to a web page if you disable the defaults</span> Do not use the Apache2 default page!</p>
+<pre>a2dissite /etc/apache2/sites-enabled/000-default.conf</pre>
+<pre>a2dissite /etc/apache2/sites-enabled/default-ssl.conf</pre>
+<h3>Change the Timeout &amp; KeepAlive </h3>
+<pre>nano /etc/apache2/apache2.conf</pre> <br>
+<p><strong>Locate and change:</strong> <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change the lines in blue below</span><br>
+  Timeout <span class="Comment">30</span><br>
+  KeepAliveTimeout <span class="Comment">5</span><br>
+  <br>
+  <span class="RSA">&lt;Directory /&gt;</span><span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Protect our system files - If you did not add this in the prior <a href="#Step2b">Step2b</a>, you can add it globally here</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Require all denied<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AllowOverride None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Options None</span><br>
+  <span class="RSA">&lt;/Directory&gt;</span> </p>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Remove Apache2 Version, Operating System, Port, and Hostname from being advertised</h3>
+<p>We could put all of Security Header settings in this file, but I highly do not recommend it on a Server that hosts numerous sites!</p>
+<p>nano /etc/apache2/conf-enabled/security.conf</p>
+<p><strong>Locate and change:</strong> <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change the lines in blue below</span><br>
+  ServerTokens <span class="Comment">Prod</span><br>
+  ServerSignature <span class="Comment">Off</span><br>
+  TraceEnable <span class="Comment">Off</span> </p>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Remove the PHP version from being advertised</h3>
+<pre>nano /etc/php5/apache2/php.ini</pre>
+<p><strong>Locate, find and change:</strong><span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change the line in blue below</span><br>
+  expose_php = <span class="Comment">Off</span></p>
+<h3>Close and exit the file</h3>
+<p>ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Tweak our performance a bit with mpm_event</h3>
+<p>Each process under event can contain multiple threads and each is capable of more than one task. This results in Apache having the lowest requirements when used with mpm_event.</p>
+<p>We are using a configuration that requires us to address the higher load requirements.<br>
+<br>
+<pre>nano /etc/apache2/mods-enabled/mpm_event.conf</pre><br>
+<p><strong>Locate, find and change:</strong><span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change the lines in blue below</span> - Config for a dedicated Web application server. If this a Web server, email, DNS, and so forth, cut everything in half and MaxMemFree minimum of 4096 - Which is 4 megs and alter as necessary.<br>
+  &lt;IfModule mpm_event_module&gt;<br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#StartServers 5</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#MinSpareServers 5</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#MaxSpareServers 10</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#MaxRequestWorkers 150</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#MaxConnectionsPerChild 0</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MaxMemFree 0</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;StartServers 5</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerLimit 32</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MaxClients 256</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MaxRequestWorkers 50</span><br>
+  <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MaxConnectionsPerChild 1000</span><br>
+  &lt;/IfModule&gt;</p>
+<h3>Restart Apache2</h3>
+<p><span class="OS">Debian/Ubuntu:</span></p>
+  <pre>systemctl restart apache2</pre><br>
+<p><span class="OS">Fedora/Centos/Suse/RedHat:</span></p>
+  <pre>systemctl restart httpd</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<h2>Step 3 - Locking down the SSL/TLS environment - Perfect Forward Secrecy (FS) and associated Cipher Suites</h2>
+<p> Another option is to remove or add SSL/TLS Protocols - I highly recommend at a minimum to remove -SSLv2 and -SSLv3!!! To remove TLS support just add -TLSv1 -TLSv1.1 -TLSv1.2 as noted below in order to drop support for each protocol. TLSv1.1 is rarely used and is not really that different from TLSv1. It is recommended, if you can at any chance, to use only TLSv1.2, but this change should be evaluated on its <a href="TLSv12.html#TLSv12" title="TLSv1.2 only effect" target="_blank">overall effect </a>prior to making such a change. </p>
+<p><b>Protocol Support</b><br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;SSL 2.0 - 0%<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;SSL 3.0 - 80%<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;TLS 1.0 - 90%<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;TLS 1.1 - 95%<span class="Red">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- We will score 90-95% on all tests</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;TLS 1.2 - 100%<br>
+</p>
+<hr>
+<a id="Step3a"></a>
+<h2>Step 3a - Forward Secrecy/Cipher Suites - Add in the website config file for granular controls of sites or globally through the SSL.conf file</h2>
+<p>You can alter the <a href="https://istlsfastyet.com/" title="Cipher Suite changes" target="_blank">cipher suite in order to achieve the preference  and order of the ciphers</a> you wish to use. If you desire to make clients follow the preferred order, then SSLHonorCipherOrder will need to be turned to on.  When the SSLHonorCipherOrder is on, clients will connect by the following cipher list. <a href="https://mozilla.github.io/server-side-tls/ssl-config-generator/" title="SSL/TLS config" target="_blank">Mozilla has a great config generator for this!</a><br>
+  <br>
+  You can remove the use of 128 bit ciphers to only use 256 bit, or remove 256 bit ciphers to only use 128 bit ciphers - add at the end of SSLCipherSuite :!AES128 or :!AES256 to remove the respective AES ciphers. You can remove 256 bit ciphers without much issue. Removing 128 bit and only using 256 bit ciphers locks you in to TLSv1.2 and drops support for older clients.  Removing the 128 bit ciphers does get a 100% score on the tests. The config presented here does not drop support for either to ensure maximum audience for our site while remaining secure.<br>
+  <br>
+  <span class="Red">If this is for a Top Secret environment, please remove the use of 128 bit ciphers and only use TLSv1.2!</span> This will get you 100% on all areas of the SSLLabs.com test but is very limiting if being used over the Internet for business. This is the preferred setup if possible. Please use it if you do not have to deal with older operating systems and browsers!</p>
+<h3 class="examples">EXAMPLE:</h3>
+<p> SSLCipherSuite &quot;EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:........&quot; <br>
+  <br>
+  The first two entries are Elliptic Curve using GCM (no preference order): EECDH+ECDSA+AESGCM, then RSA using GCM  (no preference order): EECDH+aRSA+AESGCM.  A client will try to negotiate in order of our preference we list here. The preference is for Elliptic Curve using GCM, followed by RSA using GCM, Elliptic Curve using SHA384 (EECDH+ECDSA+SHA384), Elliptic Curve using SHA256 (EECDH+ECDSA+SHA256), RSA using SHA384 (EECDH+aRSA+SHA384), RSA using SHA256 (EECDH+aRSA+SHA256), and so on down the list of ciphers. <span class="RSA">BTW the Cipher list has options:</span> + can be used for generalizing the specification of cipher suites,  as in the example for the first cipher (EECDH+ECDSA+AESGCM), we do not specify 128 or 256 bit nor sha 256 or 384. You can use the - sign  for specifying the exact cipher or spec you want to use ie (ECDHE-RSA-AES256-GCM-SHA384)</p>
+<p> <span class="RSA">Lets see what minor changes can do to this configuration</span><br>
+  <br>
+  The <a href="https://en.wikipedia.org/wiki/Template:TLS/SSL_support_history_of_web_browsers" title="Browsers TLS support" target="_blank">options</a> are whatever you desire as long as your<a href="https://cc.dcsec.uni-hannover.de/" title="What does my broswer support" target="_blank"> intended audience can use those ciphers</a> to connect to your application or site.  You can add Camellia, CHACHA20 (ECDHE+ECDSA+CHACHA20+POLY1305: ECDHE+RSA+CHACHA20+POLY1305:), or anything else in the cipher list, but the procedure uses my preference that works with most clients while remaining secure. Lets say we want to know <a href="https://wiki.mozilla.org/Security/Server_Side_TLS#Apache" title="Ciphers " target="_blank">what happens if we remove certain ciphers</a>. If you know you are not supporting older clients <span class="Red">(Internal environment or strict security site in the wild)</span>,<span class="RSA"> then you can remove EECDH+aRSA+RC4:EECDH:EDH+aRSA (Only TLSv1.2 will be used) in the procedure (Fully mitigate BEAST)</span>.  If you  remove EECDH+aRSA+RC4:EECDH:EDH+aRSA, <a href="TLSv12.html" title="Removing ciphers results" target="_blank">the results with these removed</a>. Compare the <a href="Testing.html" title="Compare results" target="_blank">results with these included</a>. It would be a similar result if you are using ECC and the list of ciphers you would accept. Think about what other ciphers you desire to add if you remove these ciphers. Unless you are an admin and understand the implications, I would not recommend it.
+<h3>Global use of the Cipher Suites for all sites using Apache2 <span class="Red">(Preferred Method)</span></h3>
+<pre>nano /etc/apache2/mods-enabled/ssl.conf</pre>
+<h3>Make the following changes to the ssl.conf <span class="Comment">&nbsp;&nbsp;&nbsp;&nbsp;&lt;--- Change the lines in blue below</span></h3>
+<p> <span class="Comment"> SSLCipherSuite &quot;EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH
+  +aRSA+RC4:EECDH:EDH+aRSA:!MEDIUM:!RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:!SEED:!CAMELLIA"<br>
+  SSLHonorCipherOrder on<br>
+  SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1</span> </p>
+<h4 class="green">Cut and Paste version</h4>
+<pre>&quot;EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH+aRSA+RC4:EECDH:EDH+aRSA:!MEDIUM:!RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:!SEED:!CAMELLIA&quot;</pre>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre><br>
+<h3>Local use in the Apache2 Website config file <span class="RSA">(Alternative)</span></h3>
+<p><span class="Comment">Add the sections in blue to the file</span><br>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre></p>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin host@EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLEngine on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateFile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/etc/apache2/ssl/www_EXAMPLE_com.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateKeyFile   /etc/apache2/ssl/rsa_EXAMPLE.key&nbsp;&nbsp;&nbsp;&nbsp;<b> or </b> &nbsp;&nbsp;&nbsp;&nbsp;ec_EXAMPLE.key<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateChainFile /etc/apache2/ssl/EXAMPLE_CA.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLCipherSuite &quot;EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  EECDH+aRSA+SHA256:EECDH+aRSA+RC4:EECDH:EDH+aRSA:!MEDIUM:!RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  !SEED:!CAMELLIA&quot; </span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLHonorCipherOrder on</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCACertificatePath /etc/ssl/certs/<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLCACertificateFile /etc/apache2/ssl/<br>
+  ...............<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<h2>Step 3b - Online Certificate Status Protocol (OCSP) Stapling - <span class="Red"> MANDATORY!!!</span></h2>
+<p> While it may appear that allowing the site operator to control verification responses would allow a fraudulent site to issue false verification for a revoked certificate, the stapled responses can't be forged as they need to be directly signed by the certificate authority, not the server. If the client does not receive a stapled response, it will just contact the OCSP server by itself. However, if the client receives an invalid stapled response, it will abort the connection. The only increased risk of OCSP stapling is that the notification of revocation for a certificate may be delayed until the last-signed OCSP response expires.<br>
+  <br>
+  As a result, clients continue to have verifiable assurance from the certificate authority that the certificate is presently valid (or was quite recently), but no longer need to individually contact the OCSP server. This means that the brunt of the resource burden is now placed back on the certificate holder. It also means that the client software no longer needs to disclose users' browsing habits to any third party.<br>
+  <br>
+  Overall performance is also improved: When the client fetches the OCSP response directly from the CA, it usually involves the lookup of the domain name of the CA's OCSP server in the DNS as well as establishing a connection to the OCSP server. When OCSP stapling is used, the certificate status information is delivered to the client through an already established channel, reducing overhead and improving performance - <a href="https://en.wikipedia.org/wiki/OCSP_stapling" title="OCSP Stapling" target="_blank">Wikipedia</a></p>
+<h3>Global use of the OCSP for all sites using Apache2 <span class="Red">(Preferred)</span></h3>
+<pre>nano /etc/apache2/mods-enabled/ssl.conf</pre>
+<p><b>Change or uncomment the following three lines in the ssl.conf</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">&lt;--Add the sections in blue to the file - </span><span class="Red"> Applies to all Operating Systems</span></p>
+<p><span class="Comment">SSLSessionCache &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;shmcb:${APACHE_RUN_DIR}/ssl_scache(512000)<br>
+  SSLSessionCacheTimeout &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 60<br>
+  SSLStaplingCache&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &quot;shmcb:logs/stapling-cache(512000)&quot;</span></p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Changing the Website config file</h3>
+<h3>Change the following three lines in the Website config file</h3>
+<p><span class="Comment">Add the sections in blue to the file</span></p>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin host@EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLEngine on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateFile &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/etc/apache2/ssl/www_EXAMPLE_com.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateKeyFile   /etc/apache2/ssl/rsa_EXAMPLE.key &nbsp;&nbsp;&nbsp;&nbsp;<b> or </b> &nbsp;&nbsp;&nbsp;&nbsp;ec_EXAMPLE.key<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateChainFile /etc/apache2/ssl/EXAMPLE_CA.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLUseStapling on</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLStaplingResponderTimeout 5</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLStaplingReturnResponderErrors off</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCACertificatePath /etc/ssl/certs/<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLCACertificateFile /etc/apache2/ssl/<br>
+  ...............<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<h3>Local use in the Apache2 Website config file <span class="RSA">(Alternative)</span></h3>
+<p><span class="Comment">Add the sections in blue to the file</span></p>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLSessionCache &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;shmcb:${APACHE_RUN_DIR}/ssl_scache(512000)</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLSessionCacheTimeout &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;60</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLStaplingCache &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;shmcb:logs/stapling-cache(150000)&quot;</span><br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin host@EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLEngine on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateFile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/etc/apache2/ssl/www_EXAMPLE_com.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateKeyFile   /etc/apache2/ssl/rsa_EXAMPLE.key&nbsp;&nbsp;&nbsp;&nbsp;<b> or </b> &nbsp;&nbsp;&nbsp;&nbsp;ec_EXAMPLE.key<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateChainFile /etc/apache2/ssl/EXAMPLE_CA.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCipherSuite &quot;EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  EECDH+aRSA+SHA256:EECDH+aRSA+RC4:EECDH:EDH+aRSA:!MEDIUM:!RC4:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  !SEED:!CAMELLIA&quot; </span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLHonorCipherOrder on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLUseStapling on</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLStaplingResponderTimeout 5</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SSLStaplingReturnResponderErrors off</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCACertificatePath /etc/ssl/certs/<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#SSLCACertificateFile /etc/apache2/ssl/<br>
+  ...............<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step3c"></a>
+<h2>Step 3c - Enabling http1.1/h2 protocols - <span class="Red">MANDATORY!!!</span></h2>
+<p>Love the Apache foundation when they warn you about their own products - Enabling HTTP/2 on your Apache Server has impact on the resource consumption and if you have a busy site, you may need to consider carefully the implications. The first noticeable thing after enabling HTTP/2 is that your server processes will start additional threads. The reason for this is that HTTP/2 gives all requests that it receives to its own Worker threads for processing, collects the results and streams them out to the client. </p>
+<p><a href="https://httpd.apache.org/docs/2.4/mod/mod_http2.html" title="HTTP1.1/H2" target="_blank">H2 Options explained more in depth</a></p>
+<p>As if the Apache Foundations documentation is not horrible enough, their guidance being awful and did they even test H2? <a href="https://http2.akamai.com/demo" title="Akamai test" target="_blank">Akamai test</a> showing the speed difference despite the Apache Foundation being the Apache Foundation. People still think encryption kills performance! This is an older myth that needs to die a painful death! Straight HTTP is slower than HTTPS!</p>
+<p>HTTP 1.1/2 has many wonderful benefits compared to HTTP 1.0/1.1. H2 has DDoS protection, better security, options, and so forth. H2 allows us to use <a href="https://www.keycdn.com/support/alpn/" title="ALPN" target="_blank">Application-Layer Protocol Negotiation (ALPN)</a> which drops our latency to pretty much zero for requests. <a href="https://developer.apple.com/library/ios/documentation/General/Reference/InfoPlistKeyReference/Articles/CocoaKeys.html#//apple_ref/doc/uid/TP40009251-SW35" title="Mobile device security" target="_blank">Mobile devices</a> are also upping the ante for security. We should use it whenever possible and pretty much every modern browser supports it. Despite the warning, I have not had problems with H2 but still will &quot;tweak&quot; MPM Prefork and other settings to gain some performance. </p>
+<h3><a href="https://tools.keycdn.com/http2-test" target="_blank">Test to see if H2 is enabled</a></h3>
+<p><span class="purple">I am surprised at how many large sites do not have it deployed.</span><br>
+  <img src="images/H2.jpg" alt="H2 Sites" longdesc="https://tools.keycdn.com/http2-test"><br>
+  Test performed April 20th, 2016 - Image source keycdn.com</p>
+<h3>Make changes to the Apache2 Website config file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin host@EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">H2Direct on</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Protocols h2 http/1.1</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLEngine on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLCertificateFile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/etc/apache2/ssl/www_EXAMPLE_com.crt<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;..............................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><span class="Red"><b>If you are going to use PHP</b></span></p>
+<p>ProxyPassMatch directives are evaluated first, prior to the FilesMatch configuration being run. We are seeking to have granular control over our headers and behaviors of PHP. ProxyPass will forward the request and FileMatch will handle the request is the best way I can describe the difference!</p><br>
+<p>ProxyPassMatch ^/(.*\.php(/.*)?)$ fcgi://127.0.0.1:9000/var/www/html/EXAMPLE/$1</p><br>
+<p>Using ProxyPassMatch removes your ability to deny/allow access to PHP files. Not to mention you lose the ability to  manipulate the server  PHP requests. If you are passing PHP requests to an FPM daemon, you'd want to use FilesMatch + SetHandler instead of ProxyPassMatch. </p>
+<p>&lt;FilesMatch \.php$&gt;<br>
+  SetHandler proxy:fcgi://127.0.0.1:9000/var/www/html/EXAMPLE/$1<br>
+  &lt;/FilesMatch&gt;</p>
+<h3>Lets make sure our Repositories are in order:</h3>
+<pre>sudo add-apt-repository -y ppa:ondrej/apache2</pre>
+<pre>sudo add-apt-repository -y ppa:ondrej/php5</pre>
+<h3>Make changes for PHP to the Apache2 Website config file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAdmin host@EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LogLevel info ssl:warn<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">H2Direct on</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Protocols h2 http/1.1</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">&lt;FilesMatch \.php$&gt;</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">SetHandler proxy:fcgi://127.0.0.1:9000/var/www/html/EXAMPLE/$1</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">&lt;/FilesMatch&gt;</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SSLEngine on<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;..............................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step3d"></a>
+<h2>Step 3d - Security Header creation - <span class="Red">MANDATORY!!!</span></h2>
+<p>Security Headers seems to be one of the most skipped steps in just about every configuration out there. I have listed the minimum security headers config that should be included in every instance of Apache 2.4.  Security Headers (to work against sniffing and manipulating our own content) are a whole topic to itself on how to control the connection with clients. Not to mention, what we could possibly to do anyone using header manipulation to injection all sorts of fun. Apache2 module and header manipulation is truly an art form that seemingly very few people understand. This is where the majority of the security work and tweaking comes into play in order to stay ahead of the curve. There are so many lovely options for <a href="http://httpd.apache.org/docs/current/mod/mod_headers.html" title="Mod Headers for Apache 2.4" target="_blank">headers</a> and how to use them.<br>
+  <br>
+  <b>We are using headers to deal with things like:</b></p>
+<ul>
+  <li>Clickjacking Attack</li>
+  <li>Only using secure Cookies</li>
+  <li>Not allow for framing options outside of our domain (X-Frame-Options)</li>
+  <li>Only allowing JavaScript, Applications, PHP, HTML, images, movies, etc. to be run from the same domain only</li>
+  <li>X-XSS-Protection</li>
+  <li>X-Content-Security-Policy</li>
+  <li>Remove the ETag</li>
+  <li>Remove the FileETag</li>
+  <li>Remove server version advertising</li>
+  <li>Not allow  sniffing of our domain assets for downloading or uploading an executable file</li>
+  <li>Setup Cache Control</li>
+  <li>Enable and disable web platform features</li>
+  <li>Control the value of the referer header in the link away from your page</li>
+</ul>
+<p> <span class="RSA">Header Syntax usage:</span> <b>Header</b> [condition] add|append|echo|edit|edit*|merge|set|setifempty|unset|note <br>
+<br>
+<span class="RSA">Header</span> [[expr=]value [replacement] [early|env=[!]varname|expr=expression] <span class="RSA">&lt;--When we desire to alter our headers behavior</span><br>
+  <br>
+  The below chart breaks down the top million requested website's - <a href="https://scotthelme.co.uk/security-headers-alexa-top-million/" title="Top million site report for headers" target="_blank">Scott Helme</a> performed this very interesting  study about the lack of Security Header use in the top million requested website's. This also means that only 6% of the 1 Million sites tested actually use HTTPS!!! <a href="https://securityheaders.io" target="_blank">Scott Helme Security Headers Test</a>- securityheaders.io<br>
+  <br>
+  <b>I do not recommend using security headers as a global configuration and will not show an alternative way of using them.</b></p>
+<p><img src="images/stats-table.jpg" alt="Scott Helme Stat Table"><br>
+</p>
+<h3>Adding Headers to  Apache2 Web site config file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<h3>Add Security Headers </h3>
+<p> &lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  ..............................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;<br>
+  <br>
+  # vim: syntax=apache ts=4 sw=4 sts=4 sr noet<br>
+  <br>
+  <pre><span class="Comment"> &lt;IfModule mod_headers.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset ETag<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FileETag None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset Server<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-Content-Type-Options &quot;nosniff&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always append X-Frame-Options SAMEORIGIN<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-XSS-Protection &quot;1; mode=block&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header edit Set-Cookie ^(.*)$ $1;HttpOnly;Secure<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set Referrer-Policy &quot;no-referrer-when-downgrade&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set Feature-Policy &quotaccelerometer 'none'; camera 'none'; geolocation 'none'; gyroscope 'none'; magnetometer 'none'; microphone 'none'; payment 'none'; usb 'none' &quot;<br> 
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Frame-Options DENY<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set Cache-Control:public, max-age=31536000<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set MyHeader &quot;Feel safe zombiesecured headers in use!!! It took %D microseconds for Zombiesecured to serve this request on %t&quot;<br>
+  &lt;/IfModule&gt;</span></pre></p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step3e"></a>
+<h2>Step 3e - HTTP Strict Transport Protocol (HSTS) - <span class="Red">MANDATORY!!!</span></h2>
+<p>The HTTP Strict Transport Security (HSTS) feature lets a web server inform the browser that it will not load the site using HTTP, and will automatically convert all attempts to access the site using HTTP to HTTPS requests instead. This is one of the most misunderstood subjects for some reason.  <br>
+You would think every bank, credit card company, and government would want this enabled by default. Right? Most do not!!!<br>
+<br>
+The clients HTTP request will be responded with an encrypted response. An HTTPS acknowledgement over HTTP! Yes! That is bad right? No! You want this! You are redirecting and altering the clients HTTP request, to an encrypted request over HTTPS. Technically, you made the secure request before the client made a non-secure connection. This is the only "secure" information over HTTP you are sharing with the connecting clients. You are noting that this is not desired when it is the standard. <br> 
+<br>
+Not adding HSTS is serious mistake!. Any major application/browser  works with it and I do not recommend making the headers a global configuration, but rather added in each Web site config file.<br>  Any enterprise internal environment should have this globally. 
+You must always be in control of the clients, the clients should never have control under their terms. <br>
+<br>
+ The following should be included in the website headers section to ensure every client never connects to the application/site unless it is secure and remains connected securely. To have the HTTP request rejected and respond with an HTTPS connection instead, it requires preloading to be enabled. <span class="red">***Add </span><span class="green">preload </span><span class="red">to the configuration once you submit your site</span> <a href="https://hstspreload.appspot.com/" title="HSTS Preload" target="_blank">here! </a></p>
+<p>Not to be annoying by repeating myself. People still think encryption kills performance! This is an older myth that needs to die a painful death! Straight HTTP is slower than HTTPS! <span class="red">Therefore, HSTS is a must for any environment!</span></p>
+<p class="Red"><strong>You have to alter the HTTP and HTTPS Web site config files.</strong></p>
+<h3>Change the  HTTP Web site file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com.conf</pre>
+<p> &lt;VirtualHost *:80&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;ServerName EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;ServerAlias www.EXAMPLE.com<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Redirect permanent / https://EXAMPLE.com/</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Red">&lt;--Will send everyone to our default site https://www.EXAMPLE.com</span><br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>OR</b><br>
+  <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Redirect permanent / https://EXAMPLE.com</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Red">&lt;--Requesting http://www.EXAMPLE.com/page - will be sent to https://www.EXAMPLE.com/page</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">RewriteEngine On</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">RewriteRule ^(.*)$ https://EXAMPLE.com/$1 [L,R=301]</span><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;DocumentRoot /var/www/html/EXAMPLE<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;DirectoryIndex index.html<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;ErrorLog ${APACHE_LOG_DIR}/error.log<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;CustomLog ${APACHE_LOG_DIR}/access.log combined<br>
+  &lt;/VirtualHost&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<h3>Change the  HTTP Web site file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p>&lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  ..............................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;<br>
+  <br>
+  # vim: syntax=apache ts=4 sw=4 sts=4 sr noet<br>
+  <br>
+  &lt;IfModule mod_headers.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset ETag<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FileETag None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset Server<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-Content-Type-Options &quot;nosniff&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always append X-Frame-Options SAMEORIGIN<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-XSS-Protection &quot;1; mode=block&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header edit Set-Cookie ^(.*)$ $1;HttpOnly;Secure<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Content-Security-Policy &quot;allow 'self';&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Frame-Options DENY<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set Cache-Control:public, max-age=31536000<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set MyHeader &quot;Feel safe zombiesecured headers in use!!! It took %D microseconds for Zombiesecured to serve this request on %t&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Header always set Strict-Transport-Security: &quot;max-age=31536000; includeSubDomains; preload&quot;</span><br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step3f"></a>
+<h2>Step 3f - Public Key Pinning (HPKP) - <span class="Red"> RECOMMENDEDish</span></h2>
+<p>If your organization generates and rotate keys more than once a year, then you might consider not implementing a static key pinning.  Internet Engineering Task Force (IETF) <a href="https://tools.ietf.org/html/rfc7459" title="RFC 7459" target="_blank">Request for Comments (RFC) 7459</a> (Representation of Uncertainty and Confidence in the Presence Information Data Format Location Object) &amp; <a href="https://tools.ietf.org/html/rfc7469" title="RFC 7469" target="_blank">RFC 7469</a> (Public Key Pinning Extension for HTTP), states you have to pin two separate certificates in order to maintain confidence and be able to have an immediate backup not being used currently. So, one must be in the certificate chain used for client connections, the other pin(s) must not be present in the certificate chain being pinned. Having   four extras CA signed certs minimum in the key store for a huge enterprise would be  recommended. Business can afford the extra peace of mind at little cost compared to the risk for blocking customers.   The standards for presentation and method are not the best for implementation at this point. Is this why is it used by less than 1% of  the entire Internet? Well, make <a href="http://news.netcraft.com/archives/2016/03/22/secure-websites-shun-http-public-key-pinning.html" title="HPKP" target="_blank"><span class="Red"><b>one mistake and you are out of business for months</b></span></a>!<br>
+  <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Public_Key_Pinning" title="Great guide for HPKP" target="_blank">Great guide for HPKP</a></p>
+<p>I am  a fan of this great technology, but it is at the infancy stage.    It really helps our security stance, but it really does not help us enough to make it mandatory either. Why? The people implementing should take heed before implementing HPKP.  It works great with HSTS to prevent MiTM attacks, but offers risk for anyone not thoroughly understanding the implementation aspects of it. <span class="Red">If you are an Admin, then is IS MANDATORY</span> and you can play with the time variable without issue and get the point I am trying to make.  If you are a Novice, this is recommended. <span class="Red">If this is your first time with HPKP -  then set max-age=1111 (~18.5 minutes)!!!!</span> Once everything is in order and tested,  then set max-age=3156000 for pinning the key for one year. What do you do if you/company change the key, or if the CA reissues the pinned certificate? Then you can pin the backup and alter  the time variable again. </p>
+<h3>Hashing</h3>
+<p>Hashing also provides three additional benefits.  First, hashing allows you to anonymize a certificate or public key. This might  be important if you application is concerned about leaking information during  decompilation and re-engineering. <br>
+  Second, a digested certificate fingerprint is  often available as a native API for many libraries, so its convenient to use.<br>
+  Finally, an organization might want to supply a  secondary (or back-up) identity in case the primary identity is compromised.  Hashing ensures your adversaries do not see the reserved certificate or public  key in advance of its use. In fact,<a href="https://tools.ietf.org/html/draft-ietf-websec-key-pinning-21#appendix-A" title=" Google's IETF draft HPKP" target="_blank"> Google's IETF draft </a> websec-key-pinning uses the technique. </p>
+<h3>The First PIN</h3>
+<p> First choice in pinning is your own certificate, if you have a great internal security infrastructure with a low risk of being compromised, then use this certificate. You can handle your entire domain and subdomains with one certificate.  If you issue a certificate for a subdomain and try to pin it, the certificates will overlap and appear to be potentially a problem on he clients end. <br>
+  Second, you can pin the intermediate CA certificate that issued your cert in use. Pin this one if you are not in a secure environment many have access to the keys and certs.</p>
+<h3>The Second PIN</h3>
+<p>The other pins (second, third, etc.) are your backup public keys on your extra other CA signed certs in the key store.  You can add the Hash fingerprint of a differing CA signed  certificate issued  for the second, third, and so on. Mozilla has a great article on <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Public_Key_Pinning" title="HPKP Mozilla" target="_blank">HPKP</a> and why they got on board with it</p>
+<h3 class="examples">EXAMPLE</h3>
+<p><span class="Comment">Header set Public-Key-Pins &quot;pin-sha256=\&quot;<span class="Red">Hash of Pin 1</span>\&quot;; pin-sha256=\&quot;<span class="Red">Hash of Pin 2</span>\&quot;; pin-sha256=\&quot;<span class="Red">Hash of Pin 3</span>\&quot;; includeSubDomains; max-age=1111&quot;</span></p>
+<p><a href="https://scotthelme.co.uk/" title="Scott Helme" target="_blank">Scott Helme</a> has a great tool to get the <a href="https://report-uri.io/home/pubkey_hash" title="Hash decoder" target="_blank">HPKP Hash Decoder</a>.Below are some steps that have been used by Scott Helme in setting up HPKP. The complete guide can be found <a href="https://scotthelme.co.uk/hpkp-http-public-key-pinning/" title="here" target="_blank">here.</a><br>
+  <br>
+  <b>How to setup HPKP</b><br>
+  <br>
+  <p>The first step to creating a HPKP policy is to get the fingerprint of your current certificate.<span class="Red"> Change certificate name to your own.</span></p>
+  <pre>openssl x509 -pubkey &lt; EXAMPLE_CA.crt | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64</pre>
+  <p> This should produce something like this: Nsj0e1Md7GkYYkVoZWmM= and this goes here: pin-sha256=\<span class="Red">put results of the hash output here between the trailing slashes</span>\ or pin-sha256=\Nsj0e1Md7GkYYkVoZWmM=\ </p>
+  <p>Creating a Backup CSR</p><br>
+  <p>In this step we are going to create some backup CSRs and include their fingerprints in the header.</p>
+  <pre>openssl req   -nodes -sha384 -days 1095   -newkey rsa:4096  -keyout rsa_EXAMPLE1.key -out rsa_EXAMPLE1.csr -extensions v3_req</pre>
+  <p>Country Name (2 letter code) [US]:<br>
+    State or Province Name (full name) [DC]:<br>
+    Locality Name (eg, city) [Washington]:<br>
+    Organization Name (eg, company) [Company]:<br>
+    Organizational Unit Name (eg, section) [Tech]:<br>
+    Common Name (e.g. server FQDN or YOUR name) [www.EXAMPLE.com]:<br>
+    Email Address [info@EXAMPLE.com]:</p>
+  <p>Please enter the following 'extra' attributes to be sent with your certificate request</p>
+  <p>A challenge password []:<br>
+    An optional company name []:</p><br>
+  <p>Change the information based on your needs. The next step would be getting the fingerprint of the CSR that we just created.</p>
+  <pre>openssl req -pubkey &lt; rsa_EXAMPLE1.csr | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64</pre>
+  <p>Now that we got the fingerprint of the CSR. We go through the above steps one more time to create another private key, CSR and fingerprint.</p>
+<h3>The report-uri directive</h3>
+<p>HPKP includes a report-uri directive where you  specify a URI to POST a JSON formatted failure report for an unauthorized access attempt. If someone tries to connect to our site against our HPKP policy, it would be nice to know we are under attack. </p>
+<p>{&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;date-time&quot;: date-time, <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;hostname&quot;: hostname,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;port&quot;: port,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;effective-expiration-date&quot;: expiration-date, <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;include-subdomains&quot;: include-subdomains,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;noted-hostname&quot;: noted-hostname,<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;served-certificate-chain&quot;: [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pem1, ... pemN &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;],<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;validated-certificate-chain&quot;: [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pem1, ... pemN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;], <br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;known-pins&quot;: [ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;known-pin1, ... known-pinN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;] <br>
+  }</p>
+<h3>Change the HTTPS Web site config file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p>&lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  ..............................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;<br>
+  <br>
+  # vim: syntax=apache ts=4 sw=4 sts=4 sr noet<br>
+  <br>
+  &lt;IfModule mod_headers.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset ETag<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FileETag None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset Server<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-Content-Type-Options &quot;nosniff&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-XSS-Protection &quot;1; mode=block&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header edit Set-Cookie ^(.*)$ $1;HttpOnly;Secure<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Content-Security-Policy &quot;allow 'self';&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Frame-Options DENY&lt;br&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always append X-Frame-Options SAMEORIGIN<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set Cache-Control:public, max-age=31536000<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set Strict-Transport-Security: &quot;max-age=31536000; includeSubDomains; preload&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set MyHeader &quot;Feel safe zombiesecured headers in use!!! It took %D microseconds for Zombiesecured to serve this request on %t&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Header always set Public-Key-Pins &quot;pin-sha256=\&quot;<span class="Red">Hash of Pin 1</span>\&quot;; pin-sha256=\&quot;<span class="Red">Hash of Pin 2</span>\&quot;; pin-sha256=\&quot;<span class="Red">Hash of Pin 3</span>\&quot;; includeSubDomains; report-uri=&quot;https://report.EXAMPLE.com&quot;; max-age=1111&quot;</span> <span class="Red"> &lt;--- Change max age to 3156000 (1 Year) once pinning is working</span><br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><a href="#top">Top</a></p>
+<hr>
+<a id="Step3g"></a>
+<h2>Step 3g - Content Security Policies - <span class="Red">HIGHLY HIGHLY RECOMMENDED!!</span></h2>
+<p>Content security policies are enacted by most of the larger content providers to minimize the amount of reloading of information. When if fact, it really is a great security measure to ensure that only our site is providing clients with content from our own sources and not someone else injecting code, malware and a vast array of other possibilities to perform against a site/server/client. It should be noted that less than one percent (1%) of the Internet has such policies and makes it easy to put my own source code in the middle of a communication stream. It is not mandatory since there are situations in which you do not wish to use CSP's at the server level. Unless you are an admin that understands those methods and implementations, use this procedure until you move the CSP to another area.</p>
+<p><a href="https://scotthelme.co.uk/" title="Scott Helme" target="_blank">Scott Helme</a> developed some nifty tools to help you <a href="https://report-uri.io/home/generate" title="Generate a Content Secuirty Policy" target="_blank">generate a policy</a>, <a href="https://report-uri.io/home/analyse" title="Anaylse your Content Secuirty Policy" target="_blank">analyses your policy</a> or <a href="https://report-uri.io/home/hash" title="Generate a hash of JS or CSS " target="_blank">generate a hash of JS or CSS </a>for your CSP </p>
+<h3>Change the HTTPS Web site config file <span class="Comment">&lt;--Add the sections in blue to the file</span></h3>
+<pre>nano /etc/apache2/sites-available/EXAMPLE_com_ssl.conf</pre>
+<p>&lt;IfModule mod_ssl.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;VirtualHost *:443&gt;<br>
+  ..............................<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&lt;/VirtualHost&gt;<br>
+  &lt;/IfModule&gt;<br>
+  <br>
+  # vim: syntax=apache ts=4 sw=4 sts=4 sr noet<br>
+  <br>
+  &lt;IfModule mod_headers.c&gt;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset ETag<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FileETag None<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header unset Server<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-Content-Type-Options &quot;nosniff&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set X-XSS-Protection &quot;1; mode=block&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header edit Set-Cookie ^(.*)$ $1;HttpOnly;Secure<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Content-Security-Policy &quot;allow 'self';&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always append X-Frame-Options SAMEORIGIN<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set X-Frame-Options DENY<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set Cache-Control:public, max-age=31536000<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header always set Strict-Transport-Security: &quot;max-age=31536000; includeSubDomains; preload&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set MyHeader &quot;Feel safe zombiesecured headers in use!!! It took %D microseconds for Zombiesecured to serve this request on %t&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Header set Public-Key-Pins &quot;pin-sha256=\&quot;\&quot;; pin-sha256=\&quot;\&quot;; includeSubDomains; report-uri=&quot;https://report.EXAMPLE.com&quot;; max-age=1111&quot;<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="Comment">Header always set Content-Security-Policy: &quot;&quot;</span> <span class="Red"> &lt;--- Put your policy parameters between to the quotes</span> - remove any redundancies <br>
+  &lt;/IfModule&gt;</p>
+<h3>Close and exit the file</h3>
+<p> ctrl+o (save) <br>
+  ctrl+x (exit)</p>
+<h3>Restart Apache2</h3>
+<pre>systemctl restart apache2</pre>
+<p><span class="RSA"><b>Zombie Secured Headers in use:</b></span></p> <br>
+<pre>Header always set Content-Security-Policy: &quot;default-src 'self' 'unsafe-inline' ; script-src 'self' ; style-src 'self' 'unsafe-inline' ; img-src 'self' ; font-src 'self' ; connect-src 'self' ; media-src 'self' ; object-src 'self' ;  child-src 'self' ; frame-ancestors 'none' ; form-action 'self' ; upgrade-insecure-requests; block-all-mixed-content; reflected-xss block; base-uri zombiesecured.com; referrer origin;&quot; </pre>
+  <p><span class="RSA"><b>Zombie Secured CSP test results</b></span><br>
+    <img src="images/Zombie_content.png" alt="https://report-uri.io/home/analyse" longdesc="http://https://report-uri.io/home/analyse"> </p>
+<p><a href="#top">Top</a></p>
+<hr>
+</body>
+</html>
